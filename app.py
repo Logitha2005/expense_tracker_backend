@@ -1,75 +1,86 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from dotenv import load_dotenv
-import os
-
-# Load environment variables from .env
-load_dotenv()
+import sqlite3
 
 app = Flask(__name__)
-
-# Enable CORS so Flutter (frontend) can access backend
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# ✅ Base route
+# ---------- Database Setup ----------
+def get_db_connection():
+    conn = sqlite3.connect("expenses.db")
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 @app.route('/')
 def home():
     return jsonify({"message": "Expense Tracker Backend running successfully!"})
 
-# ✅ Test route to check API connectivity
-@app.route('/api/test', methods=['GET'])
-def test():
-    return jsonify({"status": "success", "data": "API connected properly!"})
 
-# ✅ Example route for login (you can replace with your DB logic)
-@app.route('/login', methods=['POST'])
-def login():
-    email = request.form.get('email')
-    password = request.form.get('password')
-
-    # Dummy logic — replace with database check
-    if email == "test@example.com" and password == "1234":
-        return jsonify({"status": "success", "message": "Login successful"})
-    else:
-        return jsonify({"status": "error", "message": "Invalid credentials"}), 401
-
-# ✅ Example route for signup
-@app.route('/register', methods=['POST'])
-def register():
-    name = request.form.get('name')
-    email = request.form.get('email')
-    password = request.form.get('password')
-
-    # Dummy success response (replace with DB insert)
-    return jsonify({"status": "success", "message": f"User {name} registered successfully!"})
-
-# ✅ Example route to add expense
-@app.route('/add_expense', methods=['POST'])
+# ---------- Add Expense ----------
+@app.route('/api/add_expense', methods=['POST'])
 def add_expense():
-    data = request.get_json()
-    title = data.get('title')
-    amount = data.get('amount')
-    category = data.get('category')
+    try:
+        data = request.get_json()
+        amount = data.get('amount')
+        category = data.get('category')
+        description = data.get('description', '')
 
-    # Dummy success response
-    return jsonify({"status": "success", "message": f"Expense '{title}' added!"})
+        if not amount or not category:
+            return jsonify({'status': 'error', 'message': 'Amount and category are required'}), 400
 
-# ✅ Example route to view all expenses
-@app.route('/view_expenses', methods=['GET'])
-def view_expenses():
-    # Dummy expense list
-    expenses = [
-        {"id": 1, "title": "Groceries", "amount": 500, "category": "Food"},
-        {"id": 2, "title": "Electricity Bill", "amount": 1200, "category": "Utilities"},
-    ]
-    return jsonify({"status": "success", "expenses": expenses})
+        conn = get_db_connection()
+        conn.execute(
+            'INSERT INTO expenses (amount, category, description) VALUES (?, ?, ?)',
+            (amount, category, description)
+        )
+        conn.commit()
+        conn.close()
 
-# ✅ Global error handler
-@app.errorhandler(Exception)
-def handle_exception(e):
-    return jsonify({"error": str(e)}), 500
+        return jsonify({'status': 'success', 'message': 'Expense added successfully!'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
 
-# ✅ Run the app
+
+# ---------- Get All Expenses ----------
+@app.route('/api/get_expenses', methods=['GET'])
+def get_expenses():
+    try:
+        conn = get_db_connection()
+        expenses = conn.execute('SELECT * FROM expenses').fetchall()
+        conn.close()
+
+        expense_list = []
+        for exp in expenses:
+            expense_list.append({
+                'id': exp['id'],
+                'amount': exp['amount'],
+                'category': exp['category'],
+                'description': exp['description']
+            })
+
+        return jsonify({'status': 'success', 'data': expense_list})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+
+# ---------- Create Table (Run Once) ----------
+def create_table():
+    conn = get_db_connection()
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            amount REAL NOT NULL,
+            category TEXT NOT NULL,
+            description TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+
+create_table()
+
+# ---------- Run ----------
 if __name__ == "__main__":
-    port = int(os.environ.get("FLASK_RUN_PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=False)
