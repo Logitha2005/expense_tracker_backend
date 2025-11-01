@@ -17,6 +17,23 @@ def home():
     return jsonify({"message": "Expense Tracker Backend running successfully!"})
 
 
+# ---------- Dummy Login Route ----------
+@app.route('/login', methods=['POST'])
+def login():
+    try:
+        data = request.form  # Flutter sends as form-data
+        email = data.get('email')
+        password = data.get('password')
+
+        # Dummy check (you can replace this with DB later)
+        if email == "test@gmail.com" and password == "1234":
+            return jsonify({"status": "success", "message": "Login successful!"}), 200
+        else:
+            return jsonify({"status": "error", "message": "Invalid credentials"}), 401
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # ---------- Add Expense ----------
 @app.route('/api/add_expense', methods=['POST'])
 def add_expense():
